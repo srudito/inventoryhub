@@ -1,0 +1,94 @@
+@page "/fetchproducts"
+@inject HttpClient Http
+
+<h3>Product List</h3>
+
+@if (isLoading)
+{
+    <p>Loading...</p>
+}
+else if (!string.IsNullOrEmpty(errorMessage))
+{
+    <p style="color:red">@errorMessage</p>
+}
+else if (products?.Length > 0)
+{
+    <ul>
+        @foreach (var product in products)
+        {
+            <li>@product.Name - $@product.Price</li>
+        }
+    </ul>
+}
+else
+{
+    <p>No products found.</p>
+}
+
+@code {
+    private Product[]? products;
+    private bool isLoading = true;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProductsAsync();
+    }
+
+    /// <summary>
+    /// Handles API call and error management
+    /// </summary>
+    private async Task LoadProductsAsync()
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+            var response = await Http.GetAsync("https://orange-yodel-vgppjj5vxp63xv6q-5267.app.github.dev/api/products", cts.Token);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                errorMessage = $"Error: API returned {response.StatusCode}";
+                return;
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<Product[]>(cancellationToken: cts.Token);
+
+            if (result == null)
+            {
+                errorMessage = "Error: Invalid or empty response.";
+                return;
+            }
+
+            products = result;
+        }
+        catch (TaskCanceledException)
+        {
+            errorMessage = "Request timed out. Please try again.";
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = $"Request error: {ex.Message}";
+        }
+        catch (NotSupportedException)
+        {
+            errorMessage = "Invalid response format.";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unexpected error: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    public class Product
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public double Price { get; set; }
+        public int Stock { get; set; }
+    }
+}
