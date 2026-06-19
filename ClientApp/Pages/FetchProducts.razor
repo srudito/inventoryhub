@@ -1,3 +1,5 @@
+@using System.Text.Json
+
 @page "/fetchproducts"
 @inject HttpClient Http
 
@@ -16,7 +18,10 @@ else if (products?.Length > 0)
     <ul>
         @foreach (var product in products)
         {
-            <li>@product.Name - $@product.Price</li>
+            <li>
+                @product.Name - $@product.Price
+                (Stock: @product.Stock, Category: @product.Category?.Name)
+            </li>
         }
     </ul>
 }
@@ -44,7 +49,8 @@ else
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
-            var response = await Http.GetAsync("https://orange-yodel-vgppjj5vxp63xv6q-5267.app.github.dev/api/products", cts.Token);
+            var response = await Http.GetAsync("https://orange-yodel-vgppjj5vxp63xv6q-5267.app.github.dev/api/productlist",
+cts.Token);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -52,15 +58,32 @@ else
                 return;
             }
 
-            var result = await response.Content.ReadFromJsonAsync<Product[]>(cancellationToken: cts.Token);
+            var json = await response.Content.ReadAsStringAsync(cts.Token);
 
-            if (result == null)
+            if (string.IsNullOrWhiteSpace(json))
             {
-                errorMessage = "Error: Invalid or empty response.";
+                errorMessage = "Error: Empty response from server.";
                 return;
             }
 
-            products = result;
+            try
+            {
+                products = JsonSerializer.Deserialize<Product[]>(json, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                if (products == null)
+                {
+                    errorMessage = "Error: Empty or invalid response.";
+                }
+            }
+            catch (JsonException ex)
+            {
+                errorMessage = "Something went wrong while processing data. Please try again.";
+                Console.WriteLine($"JSON Error: {ex.Message}");
+                Console.WriteLine($"Raw JSON: {json}");
+            }
         }
         catch (TaskCanceledException)
         {
@@ -90,5 +113,13 @@ else
         public string Name { get; set; } = string.Empty;
         public double Price { get; set; }
         public int Stock { get; set; }
+
+        public Category? Category { get; set; }
+    }
+
+    public class Category
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
     }
 }
